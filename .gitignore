@@ -1,0 +1,23 @@
+﻿# deps
+node_modules/
+
+# optional vendor bundles
+# vendor/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# build output (if added later)
+dist/
+
+# editor
+.vscode/
+.idea/
+
+local_develop/

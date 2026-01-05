@@ -1,0 +1,213 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Skill Tree Editor (YAML Tree)</title>
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/layout.css" />
+  <link rel="stylesheet" href="styles/tree.css" />
+  <link rel="stylesheet" href="styles/canvas.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "@codemirror/state": "./vendor/@codemirror/state/dist/index.js",
+      "@codemirror/view": "./vendor/@codemirror/view/dist/index.js",
+      "@codemirror/language": "./vendor/@codemirror/language/dist/index.js",
+      "@codemirror/lang-yaml": "./vendor/@codemirror/lang-yaml/dist/index.js",
+      "@codemirror/commands": "./vendor/@codemirror/commands/dist/index.js",
+      "@marijn/find-cluster-break": "./vendor/@marijn/find-cluster-break/src/index.js",
+      "style-mod": "./vendor/style-mod/src/style-mod.js",
+      "w3c-keyname": "./vendor/w3c-keyname/index.js",
+      "crelt": "./vendor/crelt/index.js",
+      "@lezer/yaml": "./vendor/@lezer/yaml/dist/index.js",
+      "@lezer/lr": "./vendor/@lezer/lr/dist/index.js",
+      "@lezer/common": "./vendor/@lezer/common/dist/index.js",
+      "@lezer/highlight": "./vendor/@lezer/highlight/dist/index.js"
+    }
+  }
+  </script>
+</head>
+<body>
+<div class="app">
+  <div class="left panel">
+    <div class="toolbar">
+      <div class="toolbar-group">
+        <button class="primary" id="btnOpenProject">Open project</button>
+        <button id="btnSaveProject">Save project</button>
+        <button id="btnFit">Fit</button>
+        <button id="btnClearAutosave">Clear DOM.localStorage</button>
+      </div>
+      <div class="toolbar-group">
+        <button id="btnLoad">YAML -> Tree</button> <br>
+        <button id="btnExport">YAML <- Tree</button>
+      </div>
+      <div class="toolbar-group">
+        <button id="btnAddChild">Add child</button>
+        <button class="danger" id="btnDelete">Delete</button>
+        <button id="btnCollapse">Collapse/Expand</button>
+      </div>
+    </div>
+    <div class="status" id="status">Ready.</div>
+    <div id="yamlEditor" class="yaml-editor"></div>
+    <textarea id="yaml" class="yaml-fallback"></textarea>
+  </div>
+  <div class="resizer" id="resizer" aria-label="Resize panels"></div>
+
+  <div class="center panel">
+    <div class="view-toolbar">
+      <button class="view-btn active" id="btnViewTree">Tree view</button>
+      <button class="view-btn" id="btnViewCanvas">Canvas view</button>
+      <div class="undo-controls">
+        <button id="btnUndo">Undo</button>
+        <button id="btnRedo">Redo</button>
+      </div>
+      <div class="canvas-controls hidden" id="canvasControls">
+        <button id="btnResetLayout">Reset layout</button>
+        <button id="btnAnchorToggle">Anchor: On</button>
+        <select id="layoutDirection" aria-label="Layout direction">
+          <option value="ltr">Left → Right</option>
+          <option value="rtl">Right → Left</option>
+        </select>
+        <select id="layoutAlign" aria-label="Layout vertical align">
+          <option value="top">Top</option>
+          <option value="center">Center</option>
+        </select>
+      </div>
+    </div>
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <div class="tree-canvas" id="treeView">
+      <div class="tree-viewport" id="treeViewport">
+        <ul class="tree-root" id="treeRoot"></ul>
+      </div>
+      <div class="drop-indicator" id="treeDropIndicator"></div>
+    </div>
+    <div class="canvas-view hidden" id="canvasView">
+      <svg class="canvas-svg" id="canvasSvg">
+        <g id="canvasLinks"></g>
+      </svg>
+      <div class="canvas-viewport" id="canvasViewport"></div>
+      <div class="drop-indicator" id="canvasDropIndicator"></div>
+    </div>
+    <div class="view-toolbar bottom-toolbar">
+      <div class="search-bar">
+        <input id="searchInput" class="search-input" type="text" placeholder="Search..." />
+        <button id="btnSearchPrev"><</button>
+        <button id="btnSearchNext">></button>
+        <span id="searchCount" class="search-count">0</span>
+        <label class="search-opt"><input type="checkbox" id="searchAll" checked />All</label>
+        <label class="search-opt"><input type="checkbox" id="searchTitle" checked />Title</label>
+        <label class="search-opt"><input type="checkbox" id="searchTags" />Tags</label>
+        <label class="search-opt"><input type="checkbox" id="searchDesc" />Desc</label>
+        <label class="search-opt"><input type="checkbox" id="searchNote" />Note</label>
+        <label class="search-opt"><input type="checkbox" id="searchFields" />Fields</label>
+        <label class="search-opt"><input type="checkbox" id="searchRegex" />.*</label>
+        <label class="search-opt"><input type="checkbox" id="searchCase" />Aa</label>
+      </div>
+    </div>
+    <button class="hotkey-toggle" id="hotkeyToggle" aria-label="Hotkeys">?</button>
+    <div class="hotkey-help hidden" id="hotkeyHelp">
+      <div class="hotkey-title">Hotkeys</div>
+      <div class="hotkey-row"><kbd>?</kbd> toggle help</div>
+      <br>
+      <div class="hotkey-row"><kbd>Shift+C</kbd> canvas view</div>
+      <div class="hotkey-row"><kbd>Shift+V</kbd> tree view</div>
+      <div class="hotkey-row"><kbd>Shift+R</kbd> reset canvas layout</div>
+      <div class="hotkey-row"><kbd>F</kbd> fit view</div>
+      <br>
+      <div class="hotkey-row"><kbd>W</kbd> collapse/expand node</div>
+      <br>
+      <div class="hotkey-row"><kbd>H</kbd>/<kbd>J</kbd>/<kbd>K</kbd> move</div>
+      <div class="hotkey-row"><kbd>Arrow Keys</kbd> move</div>
+      <div class="hotkey-row"><kbd>L</kbd>/<kbd>ArrowRight</kbd> next sibling</div>
+      <div class="hotkey-row"><kbd>Shift+L</kbd> previous sibling</div>
+      <br>
+      <div class="hotkey-row"><kbd>A</kbd> add child</div>
+      <div class="hotkey-row"><kbd>D</kbd>/<kbd>Del</kbd> delete node (x2)</div>
+      <br>
+      <div class="hotkey-row"><kbd>U</kbd> undo</div>
+      <div class="hotkey-row"><kbd>Shift+U</kbd> redo</div>
+      <br>
+      <div class="hotkey-row"><kbd>Y</kbd> focus YAML panel</div>
+      <div class="hotkey-row"><kbd>Enter</kbd> focus title</div>
+      <div class="hotkey-row"><kbd>I</kbd> focus note</div>
+      <div class="hotkey-row"><kbd>Esc</kbd>/<kbd>Ctrl+[</kbd> exit edit mode</div>
+      <br>
+      <div class="hotkey-row"><kbd>/</kbd> search</div>
+    </div>
+  </div>
+  <div class="note-resizer" id="noteResizer" aria-label="Resize note panel"></div>
+  <div class="note-sidebar panel" id="noteSidebar">
+    <div class="note-panel">
+      <div class="note-head">Selected node</div>
+      <label class="note-label">Title style</label>
+      <div class="title-style-row">
+        <div class="title-color-swatches" id="titleColorSwatches">
+          <button type="button" class="title-swatch" data-title-color="#ffffff" title="White"></button>
+          <button type="button" class="title-swatch" data-title-color="#6b7280" title="Gray"></button>
+          <button type="button" class="title-swatch" data-title-color="#111827" title="Black"></button>
+        </div>
+        <input id="titleColor" type="hidden" value="#111827" />
+        <div class="title-style-controls">
+          <label class="title-toggle"><input id="titleBold" type="checkbox" /> Bold</label>
+          <label class="title-toggle"><input id="titleItalic" type="checkbox" /> Italic</label>
+        </div>
+      </div>
+      <label class="note-label">Title</label>
+      <input id="noteTitle" type="text" placeholder="Node title..." />
+      <label class="note-label">Description</label>
+      <input id="noteDescription" type="text" placeholder="Short description..." />
+      <label class="note-label">Tags</label>
+      <input id="noteTags" type="text" placeholder="tag1, tag2, ..." />
+      <label class="note-label">Fields</label>
+      <textarea id="noteFields" rows="3" placeholder="key: value"></textarea>
+      <label class="note-label">Note</label>
+      <textarea id="noteText" rows="10" placeholder="Write note (WIP Markdown)"></textarea>
+      <label class="note-label">Color</label>
+      <div class="note-color-row">
+        <div class="color-swatches" id="colorSwatches">
+          <button type="button" class="color-swatch" data-color="#d46b6b" title="Rose"></button>
+          <button type="button" class="color-swatch" data-color="#d19a55" title="Ochre"></button>
+          <button type="button" class="color-swatch" data-color="#c7b85b" title="Mustard"></button>
+          <button type="button" class="color-swatch" data-color="#78a96d" title="Green"></button>
+          <button type="button" class="color-swatch" data-color="#5aa7a4" title="Teal"></button>
+          <button type="button" class="color-swatch" data-color="#5b86c1" title="Blue"></button>
+          <button type="button" class="color-swatch" data-color="#7b6cc2" title="Violet"></button>
+          <button type="button" class="color-swatch" data-color="#b66cb0" title="Magenta"></button>
+          <button type="button" class="color-swatch" data-color="#ffffff" title="White"></button>
+          <button type="button" class="color-swatch" data-color="#d9c2a3" title="Sand"></button>
+          <button type="button" class="color-swatch" data-color="#b8d4d8" title="Mist"></button>
+          <button type="button" class="color-swatch" data-color="#b7d1c2" title="Sage"></button>
+          <button type="button" class="color-swatch" data-color="#d8b7b2" title="Blush"></button>
+          <button type="button" class="color-swatch" data-color="#c4c7e3" title="Lavender"></button>
+          <button type="button" class="color-swatch" data-color="#cdd7a8" title="Limewash"></button>
+          <button type="button" class="color-swatch" data-color="#b7c2d6" title="Slate"></button>
+          <button type="button" class="color-swatch" data-color="#d7c0b0" title="Clay"></button>
+          <button type="button" class="color-swatch" data-color="#9ca3af" title="Gray"></button>
+          <button type="button" class="color-swatch" data-color="#f5f0e6" title="Sand (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#e7f1f4" title="Mist (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#e6f0ea" title="Sage (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#f3e8e6" title="Blush (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#eef0f7" title="Lavender (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#f1f3e8" title="Limewash (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#e9edf2" title="Slate (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#f6efe8" title="Clay (soft)"></button>
+          <button type="button" class="color-swatch" data-color="#111827" title="Black"></button>
+        </div>
+        <div class="color-controls">
+          <input id="noteColor" type="color" value="#ffffff" />
+          <button id="btnColorReset">Reset</button>
+        </div>
+      </div>
+      <div class="color-actions">
+        <button id="btnColorDepth">Color by depth</button>
+        <button id="btnColorRandom">Random palette</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/js-yaml/js-yaml.min.js"></script>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
